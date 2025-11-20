@@ -1,36 +1,26 @@
 pipeline {
 
- agent any
+    agent any
 
- tools {
+    tools {
         jdk 'JAVA_HOME'
         maven 'M2_HOME'
-}
+    }
 
- stages {
+    stages {
 
- stage('GIT') {
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/KarimOuertatani/devops_4sim2.git'
+            }
+        }
 
-           steps {
+        stage('Compile Stage') {
+            steps {
+                sh 'mvn clean compile'
+            }
+        }
 
-               git branch: 'master',
-
-               url: 'https://github.com/KarimOuertatani/devops_4sim2.git'
-
-          }
-
-     }
-
- stage ('Compile Stage') {
-
- steps {
-
- sh 'mvn clean compile'
-
- }
-
- }
-
- }
+    }
 
 }
