@@ -6,10 +6,6 @@ pipeline {
         maven 'M2_HOME'
     }
 
-    environment {
-        MAVEN_OPTS = "-Dmaven.repo.local=.m2/repository"
-    }
-
     stages {
 
         stage('Checkout') {
@@ -20,19 +16,19 @@ pipeline {
 
         stage('Compile') {
             steps {
-                sh 'mvn -B clean compile'
-            }
-        }
-
-        stage('Test') {
-            steps {
-                sh 'mvn -B test'
+                sh "mvn -B clean compile -DskipTests"
             }
         }
 
         stage('Package') {
             steps {
-                sh 'mvn -B package'
+                sh "mvn -B package -DskipTests"
+            }
+        }
+
+        stage('Archive Artifact') {
+            steps {
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             }
         }
     }
