@@ -1,5 +1,4 @@
 pipeline {
-
     agent any
 
     tools {
@@ -15,24 +14,22 @@ pipeline {
             }
         }
 
-        stage('Compile Stage') {
+        stage('Compile') {
             steps {
                 sh 'mvn clean compile'
             }
         }
 
-        stage('Test Stage') {
+        stage('Test') {
             steps {
                 sh 'mvn test'
             }
         }
 
-        stage('Package Stage') {
+        stage('Package') {
             steps {
                 sh 'mvn package'
             }
         }
-
     }
-
 }
