@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: devops
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    
+    scrape_configs:
+      # Spring Boot Application
+      - job_name: 'spring-boot'
+        metrics_path: '/student/actuator/prometheus'
+        static_configs:
+          - targets: ['spring-service.devops.svc.cluster.local:80']
+            labels:
+              application: 'student-management'
+              namespace: 'devops'
+              service: 'spring-boot'
+        
+      # Node Exporter (System Metrics)
+      - job_name: 'node-exporter'
+        static_configs:
+          - targets: ['node-exporter.devops.svc.cluster.local:9100']
+            labels:
+              job: 'node-exporter'
+        
+      # Prometheus itself
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+            labels:
+              job: 'prometheus'

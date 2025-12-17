@@ -1,0 +1,122 @@
+{
+  "dashboard": {
+    "title": "DevOps Monitoring Dashboard",
+    "tags": ["devops", "kubernetes", "spring-boot", "jenkins"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "CPU Usage",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "system_cpu_usage{application=\"student-management\"}",
+            "legendFormat": "Spring Boot CPU",
+            "refId": "A"
+          },
+          {
+            "expr": "node_cpu_seconds_total{mode=\"idle\"}",
+            "legendFormat": "System CPU Idle",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Memory Usage",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "jvm_memory_used_bytes{application=\"student-management\", area=\"heap\"} / jvm_memory_max_bytes{application=\"student-management\", area=\"heap\"} * 100",
+            "legendFormat": "JVM Heap %",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "HTTP Requests",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_server_requests_seconds_count{application=\"student-management\"}[5m])",
+            "legendFormat": "Requests/sec",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Database Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "hikaricp_connections_active{application=\"student-management\"}",
+            "legendFormat": "Active Connections",
+            "refId": "A"
+          },
+          {
+            "expr": "hikaricp_connections_idle{application=\"student-management\"}",
+            "legendFormat": "Idle Connections",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 5,
+        "title": "JVM Threads",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "jvm_threads_live{application=\"student-management\"}",
+            "legendFormat": "Live Threads",
+            "refId": "A"
+          },
+          {
+            "expr": "jvm_threads_daemon{application=\"student-management\"}",
+            "legendFormat": "Daemon Threads",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "System Metrics",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "node_memory_MemTotal_bytes",
+            "legendFormat": "Total Memory",
+            "refId": "A"
+          },
+          {
+            "expr": "node_memory_MemFree_bytes",
+            "legendFormat": "Free Memory",
+            "refId": "B"
+          },
+          {
+            "expr": "node_filesystem_size_bytes",
+            "legendFormat": "Disk Size",
+            "refId": "C"
+          },
+          {
+            "expr": "node_filesystem_free_bytes",
+            "legendFormat": "Disk Free",
+            "refId": "D"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    }
+  },
+  "overwrite": true
+}

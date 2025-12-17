@@ -1,0 +1,39 @@
+=== QUERIES GRAFANA POUR VOTRE DASHBOARD ===
+
+1. CPU Usage Spring Boot:
+   system_cpu_usage{application="student-management"}
+
+2. JVM Heap Memory:
+   jvm_memory_used_bytes{application="student-management", area="heap"}
+
+3. JVM Heap Memory %:
+   jvm_memory_used_bytes{application="student-management", area="heap"} / jvm_memory_max_bytes{application="student-management", area="heap"} * 100
+
+4. HTTP Requests per second:
+   rate(http_server_requests_seconds_count{application="student-management"}[5m])
+
+5. Active Database Connections:
+   hikaricp_connections_active{application="student-management"}
+
+6. Total Database Connections:
+   hikaricp_connections_max{application="student-management"}
+
+7. Disk Usage %:
+   (disk_total_bytes{application="student-management"} - disk_free_bytes{application="student-management"}) / disk_total_bytes{application="student-management"} * 100
+
+8. JVM Threads:
+   jvm_threads_live{application="student-management"}
+
+9. System Memory (Node Exporter):
+   node_memory_MemTotal_bytes
+
+10. System CPU (Node Exporter):
+   100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+=== VISUALISATIONS RECOMMANDÉES ===
+• CPU: Stat ou Gauge
+• Mémoire: Graph ou Gauge  
+• HTTP Requests: Graph
+• Database: Graph
+• Disk: Gauge
+• Threads: Graph

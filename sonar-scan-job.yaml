@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sonar-scan
+  namespace: devops
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: sonar-scanner
+          image: maven:3.8.8-jdk-17
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              apt-get update && apt-get install -y git
+              git clone https://github.com/Malekmouelh/jenkins.git /workspace
+              cd /workspace
+              # Configurer les paramètres Sonar (host = sonarqube-service)
+              mvn -B -DskipTests=true sonar:sonar \
+                -Dsonar.host.url=http://sonarqube-service:9000 \
+                -Dsonar.login=    # si token, tu peux passer via secret
+          env:
+            - name: MAVEN_OPTS
+              value: "-Xmx1024m"

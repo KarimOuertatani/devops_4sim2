@@ -2,6 +2,8 @@ package tn.esprit.studentmanagement.entities;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
 
@@ -18,6 +20,7 @@ public class Enrollment {
     private LocalDate enrollmentDate;
     private Double grade;
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)  // Force le type VARCHAR pour H2
     private Status status;
 
     @ManyToOne

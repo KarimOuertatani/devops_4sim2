@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: devops
+data:
+  devops-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "DevOps Monitoring Dashboard",
+        "panels": [
+          {
+            "title": "CPU Usage",
+            "targets": [
+              {
+                "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+                "legendFormat": "{{instance}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+            "type": "timeseries"
+          },
+          {
+            "title": "Memory Usage",
+            "targets": [
+              {
+                "expr": "(node_memory_MemTotal_bytes - node_memory_MemFree_bytes - node_memory_Buffers_bytes - node_memory_Cached_bytes) / node_memory_MemTotal_bytes * 100",
+                "legendFormat": "Used Memory"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+            "type": "timeseries"
+          },
+          {
+            "title": "Jenkins Build Status",
+            "targets": [
+              {
+                "expr": "jenkins_builds_active",
+                "legendFormat": "Active Builds"
+              },
+              {
+                "expr": "jenkins_builds_success_total",
+                "legendFormat": "Successful Builds"
+              },
+              {
+                "expr": "jenkins_builds_failure_total",
+                "legendFormat": "Failed Builds"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+            "type": "timeseries"
+          },
+          {
+            "title": "Spring Boot HTTP Requests",
+            "targets": [
+              {
+                "expr": "rate(http_server_requests_seconds_count{application=\"student-management\"}[5m])",
+                "legendFormat": "Requests/sec"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+            "type": "timeseries"
+          },
+          {
+            "title": "JVM Memory Usage",
+            "targets": [
+              {
+                "expr": "jvm_memory_used_bytes{application=\"student-management\", area=\"heap\"}",
+                "legendFormat": "Heap Used"
+              },
+              {
+                "expr": "jvm_memory_max_bytes{application=\"student-management\", area=\"heap\"}",
+                "legendFormat": "Heap Max"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+            "type": "timeseries"
+          },
+          {
+            "title": "Kubernetes Pod Status",
+            "targets": [
+              {
+                "expr": "sum(kube_pod_status_phase{namespace=\"devops\"}) by (phase)",
+                "legendFormat": "{{phase}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+            "type": "piechart"
+          },
+          {
+            "title": "Disk Usage",
+            "targets": [
+              {
+                "expr": "100 - ((node_filesystem_avail_bytes{mountpoint=\"/\"} * 100) / node_filesystem_size_bytes{mountpoint=\"/\"})",
+                "legendFormat": "Root Disk Usage %"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+            "type": "gauge"
+          },
+          {
+            "title": "Network Traffic",
+            "targets": [
+              {
+                "expr": "rate(node_network_receive_bytes_total[5m]) * 8",
+                "legendFormat": "Receive"
+              },
+              {
+                "expr": "rate(node_network_transmit_bytes_total[5m]) * 8",
+                "legendFormat": "Transmit"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+            "type": "timeseries"
+          }
+        ]
+      }
+    }
