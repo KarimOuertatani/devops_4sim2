@@ -1,15 +1,15 @@
 pipeline {
     agent any
-    
+
     tools {
         maven 'M2_HOME'
     }
-    
+
     environment {
-        DOCKER_IMAGE = 'karimouertatani/student-management'
-        DOCKER_TAG = "${env.BUILD_NUMBER}"
-        K8S_NAMESPACE = 'devops'
-        SONARQUBE_URL = 'http://localhost:9000'
+        DOCKER_IMAGE   = 'karimouertatani/student-management'
+        DOCKER_TAG     = "${env.BUILD_NUMBER}"
+        K8S_NAMESPACE  = 'devops'
+        SONARQUBE_URL  = 'http://localhost:9000' // pour les liens dans le rapport
         SPRING_BOOT_URL = 'http://localhost:30080'
     }
 
@@ -23,8 +23,7 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/KarimOuertatani/devops_4sim2.git'
+                git branch: 'main', url: 'https://github.com/KarimOuertatani/devops_4sim2.git'
                 echo "✅ Code récupéré depuis GitHub"
             }
         }
@@ -34,8 +33,6 @@ pipeline {
                 script {
                     sh '''
                         echo "=== Configuration Kubernetes ==="
-
-                        # Configurer KUBECONFIG
                         export KUBECONFIG=/var/lib/jenkins/.kube/config
 
                         # Créer ou vérifier le namespace
@@ -60,7 +57,6 @@ pipeline {
                     ls -la target/ || echo "Aucun fichier dans target/"
                 '''
             }
-
             post {
                 success {
                     echo "🎯 32 tests exécutés avec succès"
@@ -84,15 +80,24 @@ pipeline {
                             mvn jacoco:report
                         fi
 
-                        # Exécuter analyse SonarQube
-                        mvn sonar:sonar \
-                            -Dsonar.projectKey=sonarqube-token \
-                            -Dsonar.host.url=${SONARQUBE_URL} \
-                            -Dsonar.login=${sonarqube-token} \
-                            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                        # Exécuter analyse SonarQube (utiliser les variables injectées par withSonarQubeEnv)
+                        mvn -B sonar:sonar \
+                          -Dsonar.projectKey=student-management \
+                          -Dsonar.host.url=$SONAR_HOST_URL \
+                          -Dsonar.token=$SONAR_AUTH_TOKEN \
+                          -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
-                        echo "✅ Analyse SonarQube complétée"
+                        echo "✅ Analyse SonarQube soumise"
                     '''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    // Échoue le pipeline si la Quality Gate n'est pas passée
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
@@ -127,21 +132,16 @@ pipeline {
                     echo "  - ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}"
                     echo "  - ${env.DOCKER_IMAGE}:latest"
 
-                    docker images | grep ${env.DOCKER_IMAGE}
+                    docker images | grep ${env.DOCKER_IMAGE} || true
                 """
             }
         }
 
         stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'DOCKER_USERNAME',
-                    passwordVariable: 'DOCKER_PASSWORD'
-                )]) {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                     sh """
                         echo "=== Push Docker Hub ==="
-
                         echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin
 
                         docker push ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}
@@ -160,14 +160,11 @@ pipeline {
                         echo "=== Déploiement MySQL ==="
                         export KUBECONFIG=/var/lib/jenkins/.kube/config
 
-                        # Déployer MySQL
                         kubectl apply -f mysql-deployment.yaml -n ${K8S_NAMESPACE}
 
-                        # Attendre démarrage
                         echo "Attente démarrage MySQL..."
                         sleep 15
 
-                        # Vérifier
                         kubectl get pods -l app=mysql -n ${K8S_NAMESPACE}
                         echo "✅ MySQL déployé"
                     '''
@@ -191,7 +188,6 @@ pipeline {
                         echo "Attente démarrage Spring Boot..."
                         sleep 20
 
-                        # Vérifier
                         echo "Pods Spring Boot:"
                         kubectl get pods -l app=spring-boot-app -n ${env.K8S_NAMESPACE} --watch --timeout=30s || true
 
@@ -243,8 +239,8 @@ pipeline {
                         echo ""
                         echo "✅ ÉTAPES RÉUSSIES:"
                         echo "1. ✅ Checkout code GitHub"
-                        echo "2. ✅ Build Maven (32 tests)"
-                        echo "3. ✅ Analyse SonarQube"
+                        echo "2. ✅ Build Maven (tests)"
+                        echo "3. ✅ Analyse SonarQube + Quality Gate"
                         echo "4. ✅ Packaging JAR"
                         echo "5. ✅ Build Docker"
                         echo "6. ✅ Push Docker Hub"
@@ -265,7 +261,6 @@ pipeline {
                         echo "🌟 BUILD RÉUSSI ! 🎉"
                     '''
 
-                    // Sauvegarder le rapport
                     writeFile file: "build-report-${env.BUILD_NUMBER}.txt", text: """
                     BUILD REPORT #${env.BUILD_NUMBER}
                     =============================
@@ -276,7 +271,7 @@ pipeline {
                     K8S Namespace: ${env.K8S_NAMESPACE}
 
                     URLs:
-                    - SonarQube: ${env.SONARQUBE_URL}
+                    - SonarQube: ${env.SONARQUBE_URL}/dashboard?id=student-management
                     - Application: ${env.SPRING_BOOT_URL}/student
 
                     Artifacts:
@@ -293,12 +288,10 @@ pipeline {
         always {
             echo "=== FIN DU PIPELINE BUILD #${env.BUILD_NUMBER} ==="
 
-            // Archive des artefacts
             archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             archiveArtifacts artifacts: 'reports/**/*', fingerprint: true
             archiveArtifacts artifacts: "build-report-${env.BUILD_NUMBER}.txt", fingerprint: true
 
-            // Nettoyage
             sh '''
                 echo "Nettoyage des fichiers temporaires..."
                 docker system prune -f 2>/dev/null || true
@@ -315,12 +308,12 @@ pipeline {
                 Détails:
                 - Application: Student Management
                 - Image Docker: ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}
-                - Tests: 32 tests passés
-                - SonarQube: Analyse complétée
+                - Tests: OK
+                - SonarQube: Analyse complétée + Quality Gate
                 - K8S: Déployé sur namespace ${env.K8S_NAMESPACE}
 
                 Accès:
-                - SonarQube: ${env.SONARQUBE_URL}
+                - SonarQube: ${env.SONARQUBE_URL}/dashboard?id=student-management
                 - Application: ${env.SPRING_BOOT_URL}/student
 
                 Consultez Jenkins pour plus de détails.
@@ -331,13 +324,11 @@ pipeline {
 
         failure {
             echo '❌❌❌ BUILD ÉCHOUÉ ❌❌❌'
-
             script {
                 sh '''
                     echo "=== DEBUG ==="
                     echo "Dernières erreurs:"
 
-                    # Vérifier K8S
                     export KUBECONFIG=/var/lib/jenkins/.kube/config 2>/dev/null || true
 
                     echo "1. Pods en erreur:"
