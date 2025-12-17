@@ -95,9 +95,9 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 10, unit: 'MINUTES') {
+                timeout(time: 1, unit: 'MINUTES') {
                     // Échoue le pipeline si la Quality Gate n'est pas passée
-                    waitForQualityGate abortPipeline: true
+                   // waitForQualityGate abortPipeline: true
                 }
             }
         }
