@@ -88,7 +88,7 @@ pipeline {
                         mvn sonar:sonar \
                             -Dsonar.projectKey=sonarqube-token \
                             -Dsonar.host.url=${SONARQUBE_URL} \
-                            -Dsonar.login=${SONARQUBE_TOKEN} \
+                            -Dsonar.login=${sonarqube-token} \
                             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
                         echo "✅ Analyse SonarQube complétée"
