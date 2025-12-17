@@ -105,38 +105,37 @@ pipeline {
         }
 
         stage('Build Docker Image') {
-            steps {
-                script {
-                    sh """
-                        echo "=== Construction Image Docker ==="
-                        
-                        # Vérifier/créer Dockerfile si nécessaire
-                        if [ ! -f "Dockerfile" ]; then
-                            echo "Création d'un Dockerfile basique..."
-                            cat > Dockerfile << 'EOF'
-                        FROM openjdk:17-jdk-slim
-                        WORKDIR /app
-                        COPY target/*.jar app.jar
-                        EXPOSE 8080
-                        ENTRYPOINT ["java", "-jar", "/app/app.jar"]
-                        EOF
-                        fi
-                        
-                        # Construire les images
-                        docker build -t ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} .
-                        docker tag ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} ${env.DOCKER_IMAGE}:latest
-                        
-                        echo "✅ Images Docker créées:"
-                        echo "  - ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}"
-                        echo "  - ${env.DOCKER_IMAGE}:latest"
-                        
-                        # Afficher la taille
-                        docker images | grep ${env.DOCKER_IMAGE} || true
-                    """
-                }
-            }
+    steps {
+        script {
+            sh """
+                echo "=== Construction Image Docker ==="
+                
+                # Vérifier/créer Dockerfile si nécessaire
+                if [ ! -f "Dockerfile" ]; then
+                    echo "Création d'un Dockerfile basique..."
+                    cat > Dockerfile << 'DOCKERFILE_EOF'
+FROM openjdk:17-jdk-slim
+WORKDIR /app
+COPY target/*.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+DOCKERFILE_EOF
+                fi
+                
+                # Construire les images
+                docker build -t ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} .
+                docker tag ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} ${env.DOCKER_IMAGE}:latest
+                
+                echo "✅ Images Docker créées:"
+                echo "  - ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}"
+                echo "  - ${env.DOCKER_IMAGE}:latest"
+                
+                # Afficher la taille
+                docker images | grep ${env.DOCKER_IMAGE} || true
+            """
         }
-
+    }
+}
         stage('Push Docker Image') {
             steps {
                 withCredentials([
