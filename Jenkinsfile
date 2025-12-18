@@ -8,9 +8,8 @@ pipeline {
     environment {
         DOCKER_IMAGE   = 'karimouertatani/student-management'
         DOCKER_TAG     = "${env.BUILD_NUMBER}"
-        SONARQUBE_URL  = 'http://localhost:9000'  // ou ton IP
-        K8S_NAMESPACE  = 'devops'
-        KUBECONFIG     = '/var/lib/jenkins/.kube/config'
+        SONARQUBE_URL  = 'http://localhost:9000'
+        APP_PORT       = '8080'
     }
 
     stages {
@@ -60,7 +59,7 @@ pipeline {
                             mvn jacoco:report
                         fi
                         
-                        # Analyse SonarQube avec les variables injectées automatiquement
+                        # Analyse SonarQube
                         mvn -B sonar:sonar \
                           -Dsonar.projectKey=student-management \
                           -Dsonar.projectName="Student Management" \
@@ -82,11 +81,6 @@ pipeline {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
                     script {
-                        // Optionnel : attendre la Quality Gate
-                        // def qg = waitForQualityGate()
-                        // if (qg.status != 'OK') {
-                        //     error "Quality Gate échouée: ${qg.status}"
-                        // }
                         echo "✅ Quality Gate vérifiée"
                     }
                 }
@@ -105,37 +99,45 @@ pipeline {
         }
 
         stage('Build Docker Image') {
-    steps {
-        script {
-            sh """
-                echo "=== Construction Image Docker ==="
-                
-                # Vérifier/créer Dockerfile si nécessaire
-                if [ ! -f "Dockerfile" ]; then
-                    echo "Création d'un Dockerfile basique..."
-                    cat > Dockerfile << 'DOCKERFILE_EOF'
+            steps {
+                script {
+                    sh """
+                        echo "=== Construction Image Docker ==="
+                        
+                        # Vérifier que le Dockerfile existe
+                        if [ ! -f "Dockerfile" ]; then
+                            echo "❌ ERREUR: Dockerfile manquant"
+                            echo "Création d'un Dockerfile basique..."
+                            cat > Dockerfile << 'DOCKERFILE_EOF'
 FROM openjdk:17-jdk-slim
 WORKDIR /app
 COPY target/*.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 DOCKERFILE_EOF
-                fi
-                
-                # Construire les images
-                docker build -t ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} .
-                docker tag ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} ${env.DOCKER_IMAGE}:latest
-                
-                echo "✅ Images Docker créées:"
-                echo "  - ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}"
-                echo "  - ${env.DOCKER_IMAGE}:latest"
-                
-                # Afficher la taille
-                docker images | grep ${env.DOCKER_IMAGE} || true
-            """
+                            echo "✅ Dockerfile créé"
+                        fi
+                        
+                        # Afficher le Dockerfile
+                        echo "📄 Contenu du Dockerfile:"
+                        cat Dockerfile || echo "Impossible de lire Dockerfile"
+                        
+                        # Construire les images
+                        docker build -t ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} .
+                        docker tag ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} ${env.DOCKER_IMAGE}:latest
+                        
+                        echo "✅ Images Docker créées:"
+                        echo "  - ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}"
+                        echo "  - ${env.DOCKER_IMAGE}:latest"
+                        
+                        # Afficher la taille
+                        echo "📦 Taille des images:"
+                        docker images | grep ${env.DOCKER_IMAGE} || echo "Image non trouvée"
+                    """
+                }
+            }
         }
-    }
-}
+
         stage('Push Docker Image') {
             steps {
                 withCredentials([
@@ -156,92 +158,72 @@ DOCKERFILE_EOF
                         docker push ${env.DOCKER_IMAGE}:latest
                         
                         echo "✅ Images poussées sur Docker Hub"
+                        echo "📎 Lien: https://hub.docker.com/r/karimouertatani/student-management"
                     """
                 }
             }
         }
 
-        stage('Setup Kubernetes Namespace') {
+        stage('Deploy with Docker Compose') {
             steps {
-                script {
-                    sh '''
-                        echo "=== Configuration Kubernetes ==="
-                        
-                        # Vérifier l'accès à Kubernetes
-                        if kubectl get nodes 2>/dev/null; then
-                            echo "✅ Kubernetes accessible"
-                            
-                            # Créer le namespace si nécessaire
-                            if ! kubectl get namespace ${K8S_NAMESPACE} 2>/dev/null; then
-                                kubectl create namespace ${K8S_NAMESPACE}
-                                echo "✅ Namespace '${K8S_NAMESPACE}' créé"
-                            else
-                                echo "✅ Namespace '${K8S_NAMESPACE}' existe déjà"
-                            fi
-                            
-                            # Afficher l'état
-                            kubectl get ns ${K8S_NAMESPACE}
-                        else
-                            echo "⚠ Kubernetes non accessible - vérifiez la configuration"
-                            echo "Pour tester: kubectl get nodes"
-                        fi
-                    '''
-                }
-            }
-        }
+                sh '''
+                    echo "=== Déploiement avec Docker Compose ==="
+                    
+                    # Créer un docker-compose.yml si nécessaire
+                    if [ ! -f "docker-compose.yml" ]; then
+                        echo "Création de docker-compose.yml..."
+                        cat > docker-compose.yml << 'COMPOSE_EOF'
+version: '3.8'
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: studentdb
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
 
-        stage('Deploy MySQL to Kubernetes') {
-            steps {
-                script {
-                    sh '''
-                        echo "=== Déploiement MySQL ==="
-                        
-                        if kubectl get nodes 2>/dev/null; then
-                            # Appliquer la configuration MySQL
-                            kubectl apply -f mysql-deployment.yaml --validate=false
-                            
-                            echo "⏳ Attente démarrage MySQL..."
-                            sleep 20
-                            
-                            # Vérifier le déploiement
-                            kubectl get pods,svc -n ${K8S_NAMESPACE} -l app=mysql 2>/dev/null || echo "MySQL en cours de démarrage..."
-                            echo "✅ MySQL déployé"
-                        else
-                            echo "⚠ Kubernetes non accessible - déploiement sauté"
-                        fi
-                    '''
-                }
-            }
-        }
+  student-app:
+    image: karimouertatani/student-management:latest
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/studentdb
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
 
-        stage('Deploy Spring Boot to Kubernetes') {
-            steps {
-                script {
-                    sh """
-                        echo "=== Déploiement Spring Boot ==="
-                        
-                        if kubectl get nodes 2>/dev/null; then
-                            # Mettre à jour l'image dans le fichier YAML
-                            sed -i "s|image:.*|image: ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}|g" spring-deployment.yaml
-                            
-                            # Appliquer la configuration Spring Boot
-                            kubectl apply -f spring-deployment.yaml --validate=false
-                            
-                            echo "⏳ Attente démarrage Spring Boot..."
-                            sleep 30
-                            
-                            # Vérifier le déploiement et le rollout
-                            kubectl get pods,svc -n ${env.K8S_NAMESPACE} -l app=spring-boot-app 2>/dev/null || echo "Spring Boot en cours de démarrage..."
-                            
-                            # Vérifier le statut du rollout
-                            kubectl rollout status deployment/spring-boot-app -n ${env.K8S_NAMESPACE} --timeout=120s 2>/dev/null || echo "Rollout en cours..."
-                            
-                            echo "✅ Spring Boot déployé"
-                        else
-                            echo "⚠ Kubernetes non accessible - déploiement sauté"
-                        fi
-                    """
-                }
+volumes:
+  mysql_data:
+COMPOSE_EOF
+                        echo "✅ docker-compose.yml créé"
+                    fi
+                    
+                    # Arrêter les conteneurs existants
+                    docker-compose down 2>/dev/null || true
+                    
+                    # Démarrer avec la nouvelle image
+                    docker-compose up -d
+                    
+                    echo "⏳ Attente du démarrage (30 secondes)..."
+                    sleep 30
+                    
+                    echo "✅ Application déployée avec Docker Compose"
+                    echo "🌐 Spring Boot: http://localhost:8080"
+                    echo "🗄️ MySQL: localhost:3306"
+                    echo "👤 MySQL user: root"
+                    echo "🔑 MySQL password: root"
+                '''
             }
         }
 
@@ -251,24 +233,34 @@ DOCKERFILE_EOF
                     sh '''
                         echo "=== Vérification santé ==="
                         
-                        if kubectl get nodes 2>/dev/null; then
-                            echo "1. 📊 État des pods:"
-                            kubectl get pods -n ${K8S_NAMESPACE} -o wide 2>/dev/null || echo "Pods non disponibles"
-                            
-                            echo ""
-                            echo "2. 🌐 Services:"
-                            kubectl get svc -n ${K8S_NAMESPACE} 2>/dev/null || echo "Services non disponibles"
-                            
-                            echo ""
-                            echo "3. 📝 Logs Spring Boot:"
-                            SPRING_POD=$(kubectl get pods -n ${K8S_NAMESPACE} -l app=spring-boot-app -o jsonpath="{.items[0].metadata.name}" 2>/dev/null || echo "")
-                            
-                            if [ -n "$SPRING_POD" ]; then
-                                echo "Pod: $SPRING_POD"
-                                echo "Derniers logs:"
-                                kubectl logs $SPRING_POD -n ${K8S_NAMESPACE} --tail=5 2>/dev/null || echo "Logs non disponibles"
+                        echo "1. 📊 Conteneurs Docker:"
+                        docker ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"
+                        
+                        echo ""
+                        echo "2. 🌐 Test de l'API Spring Boot:"
+                        # Attendre que l'application soit prête
+                        for i in {1..10}; do
+                            if curl -s http://localhost:8080/actuator/health > /dev/null 2>&1; then
+                                echo "✅ Spring Boot est en ligne"
+                                curl -s http://localhost:8080/actuator/health | jq -r '.status' 2>/dev/null || curl -s http://localhost:8080/actuator/health
+                                break
+                            else
+                                echo "⏳ Attente ($i/10)..."
+                                sleep 5
                             fi
+                        done
+                        
+                        echo ""
+                        echo "3. 🗄️ Test MySQL:"
+                        if docker-compose ps mysql | grep -q "Up"; then
+                            echo "✅ MySQL est en ligne"
+                        else
+                            echo "⚠ MySQL semble avoir des problèmes"
                         fi
+                        
+                        echo ""
+                        echo "4. 📝 Logs de l'application:"
+                        docker-compose logs student-app --tail=10 2>/dev/null || echo "Logs non disponibles"
                         
                         echo "✅ Vérifications terminées"
                     '''
@@ -293,19 +285,23 @@ DOCKERFILE_EOF
                     4. ✅ Packaging JAR
                     5. ✅ Build Docker image
                     6. ✅ Push Docker Hub
-                    7. ✅ Déploiement MySQL sur K8S
-                    8. ✅ Déploiement Spring Boot sur K8S
-                    9. ✅ Health checks
+                    7. ✅ Déploiement avec Docker Compose
+                    8. ✅ Health checks
                     
                     📦 ARTÉFACTS:
                     • Docker Image: ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}
                     • Docker Image (latest): ${env.DOCKER_IMAGE}:latest
                     • Application JAR: target/student-management-*.jar
-                    • Namespace K8S: ${env.K8S_NAMESPACE}
                     
                     🔗 ACCÈS:
                     • SonarQube: ${env.SONARQUBE_URL}/dashboard?id=student-management
                     • Docker Hub: https://hub.docker.com/r/karimouertatani/student-management
+                    • Application: http://localhost:8080
+                    • MySQL: localhost:3306 (root/root)
+                    
+                    🐳 CONTENEURS:
+                    • student-app: http://localhost:8080
+                    • mysql: localhost:3306
                     
                     🌟 BUILD RÉUSSI ! 🎉
                     """
@@ -316,8 +312,15 @@ DOCKERFILE_EOF
                     =============================
                     Time: ${new Date()}
                     Image: ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}
-                    K8S Namespace: ${env.K8S_NAMESPACE}
-                    Status: Déployé avec succès
+                    Status: Déployé avec Docker Compose
+                    
+                    Services:
+                    - Spring Boot: http://localhost:8080
+                    - MySQL: localhost:3306 (root/root)
+                    
+                    Docker Images:
+                    - ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}
+                    - ${env.DOCKER_IMAGE}:latest
                     """
                 }
             }
@@ -331,6 +334,7 @@ DOCKERFILE_EOF
             // Archiver les artefacts
             archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             archiveArtifacts artifacts: "build-report-${env.BUILD_NUMBER}.txt", fingerprint: true
+            archiveArtifacts artifacts: 'docker-compose.yml', fingerprint: true
             
             // Nettoyage Docker
             sh 'docker logout 2>/dev/null || true'
@@ -343,7 +347,7 @@ DOCKERFILE_EOF
             /*
             emailext (
                 subject: "✅ SUCCESS: Build #${env.BUILD_NUMBER} - Student Management",
-                body: "Le build Jenkins #${env.BUILD_NUMBER} a réussi. Image: ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}",
+                body: "Le build Jenkins #${env.BUILD_NUMBER} a réussi. Application disponible sur http://localhost:8080",
                 to: 'karim.ouertatani@esprit.tn'
             )
             */
@@ -359,8 +363,11 @@ DOCKERFILE_EOF
                     echo "1. Fichiers workspace:"
                     ls -la 2>/dev/null || true
                     echo ""
-                    echo "2. Fichiers target:"
-                    ls -la target/ 2>/dev/null || echo "Dossier target non trouvé"
+                    echo "2. Conteneurs Docker:"
+                    docker ps -a 2>/dev/null || echo "Docker non disponible"
+                    echo ""
+                    echo "3. Logs Docker Compose:"
+                    docker-compose logs 2>/dev/null || echo "Docker Compose non disponible"
                 '''
             }
         }
